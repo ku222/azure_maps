@@ -7,10 +7,16 @@ var storeLocationDataUrl = 'data/ContosoCoffee.txt';
 //The URL to the icon image. 
 var iconImageUrl = 'images/CoffeeIcon.png';
 
+//The minimum number of characters needed in the search input before a search is performed.
+var minSearchInputLength = 3;
+
+//The number of ms between key strokes to wait before performing a search.
+var keyStrokeDelay = 150;
+
 //An array of country region ISO2 values to limit searches to.
 var countrySet = ['US', 'CA', 'GB', 'FR','DE','IT','ES','NL','DK'];      
 
-var map, popup, datasource, iconLayer, centerMarker, searchURL;
+var map, popup, datasource, iconLayer, centerMarker, searchURL, searchInput, resultsPanel, searchInputLength;
 var listItemTemplate = '<div class="listItem" onclick="itemSelected(\'{id}\')"><div class="listItem-title">{title}</div>{city}<br />Open until {closes}<br />{distance} miles away</div>';
 
 function initialize() {
@@ -237,6 +243,85 @@ function performSearch() {
         } else {
             document.getElementById('listPanel').innerHTML = '<div class="statusMessage">Unable to find the location you searched for.</div>';
         } 
+    });
+}
+
+function searchInputKeyup(e) {
+    centerMapOnResults = false;
+    if (searchInput.value.length >= minSearchInputLength) {
+        if (e.keyCode === 13) {
+            centerMapOnResults = true;
+        }
+        //Wait 100ms and see if the input length is unchanged before performing a search. 
+        //This will reduce the number of queries being made on each character typed.
+        setTimeout(function () {
+            if (searchInputLength == searchInput.value.length) {
+                search();
+            }
+        }, keyStrokeDelay);
+    } else {
+        resultsPanel.innerHTML = '';
+    }
+    searchInputLength = searchInput.value.length;
+}
+
+function search() {
+    //Remove any previous results from the map.
+    datasource.clear();
+    popup.close();
+    resultsPanel.innerHTML = '';
+
+    //Use SubscriptionKeyCredential with a subscription key
+    var subscriptionKeyCredential = new atlas.service.SubscriptionKeyCredential(atlas.getSubscriptionKey());
+
+    //Use subscriptionKeyCredential to create a pipeline
+    var pipeline = atlas.service.MapsURL.newPipeline(subscriptionKeyCredential);
+
+    //Construct the SearchURL object
+    var searchURL = new atlas.service.SearchURL(pipeline);
+
+    var query = document.getElementById("search-input").value;
+    searchURL.searchPOI(atlas.service.Aborter.timeout(10000), query, {
+        lon: map.getCamera().center[0],
+        lat: map.getCamera().center[1],
+        maxFuzzyLevel: 4,
+        view: 'Auto'
+    }).then((results) => {
+
+        //Extract GeoJSON feature collection from the response and add it to the datasource
+        var data = results.geojson.getFeatures();
+        datasource.add(data);
+
+        if (centerMapOnResults) {
+            map.setCamera({
+                bounds: data.bbox
+            });
+        }
+        console.log(data);
+        //Create the HTML for the results list.
+        var html = [];
+        for (var i = 0; i < data.features.length; i++) {
+            var r = data.features[i];
+            html.push('<li onclick="itemClicked(\'', r.id, '\')" onmouseover="itemHovered(\'', r.id, '\')">')
+            html.push('<div class="title">');
+            if (r.properties.poi && r.properties.poi.name) {
+                html.push(r.properties.poi.name);
+            } else {
+                html.push(r.properties.address.freeformAddress);
+            }
+            html.push('</div><div class="info">', r.properties.type, ': ', r.properties.address.freeformAddress, '</div>');
+            if (r.properties.poi) {
+                if (r.properties.phone) {
+                    html.push('<div class="info">phone: ', r.properties.poi.phone, '</div>');
+                }
+                if (r.properties.poi.url) {
+                    html.push('<div class="info"><a href="http://', r.properties.poi.url, '">http://', r.properties.poi.url, '</a></div>');
+                }
+            }
+            html.push('</li>');
+            resultsPanel.innerHTML = html.join('');
+        }
+
     });
 }
 

@@ -82,6 +82,7 @@
                 });
             });
         }
+
         function searchInputKeyup(e) {
             centerMapOnResults = false;
             if (searchInput.value.length >= minSearchInputLength) {
@@ -100,6 +101,7 @@
             }
             searchInputLength = searchInput.value.length;
         }
+
         function search() {
             //Remove any previous results from the map.
             datasource.clear();
@@ -159,6 +161,7 @@
 
             });
         }
+        
         function itemHovered(id) {
             //Show a popup when hovering an item in the result list.
             var shape = datasource.getShapeById(id);
